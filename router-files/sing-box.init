@@ -1,0 +1,66 @@
+#!/bin/sh /etc/rc.common
+# sing-box.init — sing-box supervisor without procd
+#
+# Use this instead of the packaged /etc/init.d/sing-box when
+# sing-box + procd is unreliable (gVisor on MIPS / OpenWrt 25+).
+#
+# Deploy (deprecated — done automatically by 03-DEPLOY.md step 3):
+#   cat router-files/sing-box.init | ssh root@<router> \
+#     "cat > /etc/init.d/sing-box && chmod +x /etc/init.d/sing-box"
+#   /etc/init.d/sing-box enable
+#   /etc/init.d/sing-box start
+
+START=99
+STOP=10
+
+PIDFILE=/var/run/sing-box.pid
+
+start() {
+    [ -f /etc/sing-box/config.json ] || { echo "ERR: no config"; exit 1; }
+
+    # Load PBR nft rules (separate table, not auto-included by fw4)
+    /etc/sing-box/proxy-tun.nft 2>/dev/null || true
+
+    rm -rf /tmp/sing-box 2>/dev/null
+    mkdir -p /tmp/sing-box
+    setsid /usr/bin/sing-box run \
+        -c /etc/sing-box/config.json \
+        -D /tmp/sing-box \
+        </dev/null >/dev/null 2>&1 &
+    echo "$!" > "$PIDFILE"
+    echo "sing-box started PID=$!"
+
+    for i in $(seq 30); do
+        ip -4 addr show tun0 2>/dev/null | grep -q "inet " && break
+        sleep 2
+    done
+
+    sleep 3
+
+    ip rule add pref 100 fwmark 0x64 lookup 100 2>/dev/null
+    for i in 1 2 3; do
+        ip route replace default dev tun0 scope link table 100 2>/dev/null && break
+        sleep 2
+    done
+    ip route replace 192.168.1.0/24 dev br-lan scope link table 100 2>/dev/null
+    logger -t sing-box "PBR routes added for tun0"
+}
+
+stop() {
+    local pid
+    pid=$(cat "$PIDFILE" 2>/dev/null)
+    [ -n "$pid" ] && kill "$pid" 2>/dev/null
+    killall -9 sing-box 2>/dev/null
+    rm -f "$PIDFILE"
+    rm -rf /tmp/sing-box 2>/dev/null
+}
+
+restart() {
+    stop
+    sleep 2
+    start
+}
+
+boot() {
+    start
+}
