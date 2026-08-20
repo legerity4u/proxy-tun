@@ -19,6 +19,8 @@ start() {
     [ -f /etc/sing-box/config.json ] || { echo "ERR: no config"; exit 1; }
 
     # Load PBR nft rules (separate table, not auto-included by fw4)
+    # Ensure table exists before flush (flush fails if table missing)
+    nft add table inet proxy_tun 2>/dev/null || true
     /etc/sing-box/proxy-tun.nft 2>/dev/null || true
 
     rm -rf /tmp/sing-box 2>/dev/null
