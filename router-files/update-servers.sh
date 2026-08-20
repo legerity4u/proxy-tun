@@ -5,7 +5,12 @@
 #
 #   --dry-run   только показать отбор, config.json не трогать
 #
-# Страны short-list (зашиты): Германия, Франция, Англия
+# Страны short-list (зашиты): Финляндия, Нидерланды, Венгрия
+# Матчим по флагам (URL-encoded) — провайдер кодирует названия стран в метках,
+# русские названия оставлены как fallback для старого формата подписки.
+#   🇫🇮 Финляндия  = %F0%9F%87%AB%F0%9F%87%AE
+#   🇳🇱 Нидерланды = %F0%9F%87%B3%F0%9F%87%B1
+#   🇭🇺 Венгрия    = %F0%9F%87%AD%F0%9F%87%BA
 # Отбор: все серверы этих стран → TCP-test (nc) → топ-3 по RTT
 # → sing-box check (Reality handshake) → первый прошедший → config.json
 # → restart sing-box
@@ -14,7 +19,7 @@ set -eu
 
 LOG_TAG="update-servers"
 SELF="update-servers"
-COUNTRIES="Германия|Франция|Англия"
+COUNTRIES="%F0%9F%87%AB%F0%9F%87%AE|%F0%9F%87%B3%F0%9F%87%B1|%F0%9F%87%AD%F0%9F%87%BA|Финляндия|Нидерланды|Венгрия"
 TOP_N=3
 TCP_TIMEOUT=2
 CHECK_TIMEOUT=90
