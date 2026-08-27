@@ -9,12 +9,12 @@
 # подключаются include (раскомментируй нужные при деплое).
 #
 # QUIC block: UDP/443 → @youtube_v4 → drop
-# Идемпотентность: flush перед переопределением.
-
-# add table (idempotent) before flush — otherwise flush errors on
-# first load when the table doesn't exist yet (nftables < 1.1).
+# Идемпотентность: полный пересбор таблицы.
+# add+delete гарантирует отсутствие таблицы перед декларацией — простой
+# `flush` НЕ удаляет цепочки: при перезагрузке оставались цепочки от старых
+# версий файла (2026-08-27: осталась цепочка output от откаченной правки).
 add table inet proxy_tun
-flush table inet proxy_tun
+delete table inet proxy_tun
 
 table inet proxy_tun {
 
