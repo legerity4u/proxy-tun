@@ -180,11 +180,33 @@ nft list chain inet fw4 accept_to_vpn 2>/dev/null
 
 ## Шаг 6. DNS
 
-Форсируем 1.1.1.1 / 8.8.4.4 (провайдерский DNS может отдавать только AAAA):
+> ⚠️ **Важно (2026-08-27, MR3020):** провайдер выборочно подменяет ответы открытого
+> UDP/53 на `youtube.com`/`www.youtube.com` (отвечает NXDOMAIN). Симптом: YouTube на
+> Samsung TV — чёрный экран на старте приложения, iPhone работает (у него свой
+> зашифрованный DNS). Лечится: `noresolv` (не брать DNS из WAN-DHCP провайдера) +
+> чистые резолверы + hosts-записи на отравленные имена. Подробности — в
+> [TROUBLESHOOTING.md → Сценарий Ж](TROUBLESHOOTING.md#сценарий-ж-чёрный-экран-youtube-на-smart-tv).
 
 ```bash
-uci add_list dhcp.@dnsmasq[0].server='1.1.1.1'
-uci add_list dhcp.@dnsmasq[0].server='8.8.4.4'
+# 1. Не использовать DNS из WAN-DHCP (провайдерские резолверы могут травить ответы)
+uci set dhcp.@dnsmasq[0].noresolv='1'
+
+# 2. Чистые upstream (8.8.8.8/9.9.9.9 — проверены, не отравляются)
+uci delete dhcp.@dnsmasq[0].server 2>/dev/null
+uci add_list dhcp.@dnsmasq[0].server='8.8.8.8'
+uci add_list dhcp.@dnsmasq[0].server='9.9.9.9'
+
+# 3. Не кэшировать NXDOMAIN (иначе отравленный ответ «залипает» на часы)
+uci set dhcp.@dnsmasq[0].nonegcache='1'
+
+# 4. hosts-записи на имена, которые провайдер травит (обход без upstream).
+#    IP должны быть внутри @youtube_v4, чтобы шли через туннель.
+cat >> /etc/hosts <<'EOF'
+172.217.20.174   youtube.com
+142.251.152.4    www.youtube.com
+142.251.152.4    m.youtube.com
+EOF
+
 uci commit dhcp
 /etc/init.d/dnsmasq restart
 ```
@@ -192,8 +214,22 @@ uci commit dhcp
 **Проверка:**
 ```bash
 nslookup youtube.com 127.0.0.1 | grep Address
-# → Address 1: 209.85.x.x (A-запись от 1.1.1.1)
+# → Address 1: 172.217.20.174 (из /etc/hosts, не зависит от провайдера)
+nslookup kinopoisk.ru 127.0.0.1 | grep Address
+# → Address 1: 213.180.x.x (обычный upstream)
 ```
+
+> **Опционально — защита от IPv6-зависаний Tizen:** если Smart TV не фоллбэчится
+> с IPv6 на IPv4 (чёрный экран при наличии ULA в LAN, но без глобального IPv6),
+> отключить анонсы IPv6 и фильтровать AAAA:
+> ```bash
+> uci set dhcp.lan.ra='disabled'
+> uci set dhcp.lan.dhcpv6='disabled'
+> uci set dhcp.lan.ra_slaac='0'
+> uci set dhcp.@dnsmasq[0].filter_aaaa='1'
+> uci commit dhcp
+> /etc/init.d/odhcpd restart; /etc/init.d/dnsmasq restart
+> ```
 
 ---
 

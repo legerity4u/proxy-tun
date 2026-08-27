@@ -24,6 +24,7 @@
 | YouTube на iPhone: «Не удалось загрузить видео» | **Сценарий Г** |
 | Кинопоиск / VK Видео: не грузятся | **Сценарий Д** |
 | Ajax Hub: нет соединения с Ethernet, сервера не видны | **Сценарий Д2** |
+| YouTube на Smart TV: чёрный экран при старте приложения (iPhone при этом работает) | **Сценарий Ж** |
 | Роутер завис, SSH не отвечает | **Сценарий Е** |
 
 ---
@@ -379,6 +380,91 @@ IP Ajax Hub обычно: AWS EC2 (eu-west-1, eu-west-3) — Париж, Ирл�
 ### Как проверить что помогло
 
 Открой kinopoisk.ru или vkvideo.ru на любом устройстве — должно грузиться как обычно, без задержек.
+
+---
+
+## Сценарий Ж: Чёрный экран YouTube на Smart TV при старте
+
+**Что видит пользователь:** на iPhone YouTube работает, а на Samsung TV приложение
+открывается сразу чёрным экраном — не доходит даже до экрана выбора профиля.
+
+**Корень проблемы (2026-08-27, MR3020):** провайдер выборочно подменяет ответы
+открытого UDP/53 на имена `youtube.com` / `www.youtube.com` — отвечает `NXDOMAIN`.
+Tizen-приложение не может зарезолвить `youtube.com` → умирает до старта UI. iPhone
+работает, потому что использует собственный зашифрованный DNS (Private Relay/DoH)
+или кэш. Остальные Google-домены (`youtubei.googleapis.com`, `i.ytimg.com`,
+`*.googlevideo.com`) не отравляются — поэтому по conntrack видно, что TV успешно
+ходит к YouTube API через туннель, но само приложение всё равно не стартует.
+
+### Как проверить
+
+**Шаг 1 — резолвится ли `youtube.com` через dnsmasq?**
+
+```bash
+nslookup youtube.com 127.0.0.1 | grep Address
+# NXDOMAIN → провайдер травит это имя
+nslookup youtubei.googleapis.com 127.0.0.1 | grep Address
+# резолвится → отравление точечное (только youtube.com/www.youtube.com)
+```
+
+**Шаг 2 — dnsmasq не подтягивает DNS провайдера из WAN-DHCP?**
+
+```bash
+uci get dhcp.@dnsmasq[0].noresolv   # должно быть '1'
+uci get dhcp.@dnsmasq[0].server     # чистые резолверы (8.8.8.8, 9.9.9.9)
+```
+
+Если `noresolv` не задан — dnsmasq, помимо списка `server=`, использует DNS из
+`/etc/resolv.conf` WAN-DHCP (провайдерские резолверы). Они отвечают NXDOMAIN на
+`youtube.com` мгновенно (1 хоп) и выигрывают гонку у честного ответа 8.8.8.8.
+
+**Шаг 3 — отравление точечное или глобальное?**
+
+```bash
+nslookup youtube.com 8.8.8.8     # прямой запрос (не через dnsmasq)
+# резолвится → DPI различает форму пакета dnsmasq (EDNS0/0x20) — см. ниже
+```
+
+### Как исправить
+
+```bash
+uci set dhcp.@dnsmasq[0].noresolv='1'          # не брать DNS из WAN-DHCP
+uci delete dhcp.@dnsmasq[0].server 2>/dev/null
+uci add_list dhcp.@dnsmasq[0].server='8.8.8.8'
+uci add_list dhcp.@dnsmasq[0].server='9.9.9.9'
+uci set dhcp.@dnsmasq[0].nonegcache='1'        # NXDOMAIN не кэшировать
+cat >> /etc/hosts <<'EOF'
+172.217.20.174   youtube.com
+142.251.152.4    www.youtube.com
+142.251.152.4    m.youtube.com
+EOF
+uci commit dhcp
+/etc/init.d/dnsmasq restart
+```
+
+> **Почему hosts, а не «просто другие резолверы»:** DPI отравляет открытый UDP/53
+> по форме пакета dnsmasq (EDNS0 + 0x20-рандомизация регистра) — даже запросы
+> dnsmasq к `8.8.8.8` получают NXDOMAIN, тогда как прямой `nslookup youtube.com 8.8.8.8`
+> проходит. Поэтому единственный надёжный обход для этих 2 имён — hosts-записи
+> (резолв без upstream). Остальные домены резолвятся штатно через 8.8.8.8/9.9.9.9.
+
+### Как проверить что помогло
+
+```bash
+nslookup youtube.com 127.0.0.1 | grep Address
+# → 172.217.20.174 (из /etc/hosts)
+```
+
+Полностью выключите TV из розетки на ~30 сек (сброс DNS-кэша Tizen), включите,
+откройте YouTube — должен выйти на выбор профиля.
+
+### Что НЕ работает (проверено 2026-08-27)
+
+- **DNS через туннель** (маркировка UDP/53 к 8.8.8.8 → tun0): xudp поверх VLESS
+  на этом канале ненадёжен — sing-box сыпет `listen outbound packet connection: EOF`,
+  DNS работает рывками, ломает и iPhone. Не использовать.
+- **https-dns-proxy (DoH)**: пакет из 23.05.6 на mipsel_24kc зависает в D-state
+  (не отвечает на запросы, неубиваем, 94% CPU). Требует перезагрузки роутера.
 
 ---
 
