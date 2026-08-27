@@ -5,9 +5,6 @@
 # a separate table definition.
 #
 # Ядро (всегда): @youtube_v4 → fwmark 0x64 → table 100 → tun0
-# DNS до публичных резолверов (8.8.8.8/9.9.9.9) → тоже в туннель:
-# провайдер выборочно подменяет ответы открытого UDP/53 на youtube.com
-# (NXDOMAIN) — резолвит exit-node туннеля (2026-08-27, MR3020).
 # Опциональные ресурсы — файлы из /etc/sing-box/proxy-tun.d/,
 # подключаются include (раскомментируй нужные при деплое).
 #
@@ -52,25 +49,10 @@ table inet proxy_tun {
 
         iifname "br-lan" ip daddr 192.168.0.0/16 return
         iifname "br-lan" ip daddr 127.0.0.0/8 return
-
-        # DNS до публичных резолверов — в туннель (ДО общего return для 53):
-        # клиенты с хардкодом 8.8.8.8/9.9.9.9 не должны зависеть от ISP DNS.
-        iifname "br-lan" ip daddr { 8.8.8.8, 9.9.9.9 } udp dport 53 meta mark set 0x64
-        iifname "br-lan" ip daddr { 8.8.8.8, 9.9.9.9 } tcp dport 53 meta mark set 0x64
-
         iifname "br-lan" udp dport 53 return
         iifname "br-lan" tcp dport 53 return
         iifname "br-lan" udp dport { 67, 68 } return
         iifname "br-lan" ip daddr @youtube_v4 meta mark set 0x64
-    }
-
-    # DNS-запросы самого роутера (dnsmasq → 8.8.8.8/9.9.9.9) — в туннель.
-    # type route + mark ДО принятия решения о маршруте → table 100 → tun0.
-    chain output {
-        type route hook output priority -150; policy accept;
-
-        ip daddr { 8.8.8.8, 9.9.9.9 } udp dport 53 meta mark set 0x64
-        ip daddr { 8.8.8.8, 9.9.9.9 } tcp dport 53 meta mark set 0x64
     }
 
     chain forward {
