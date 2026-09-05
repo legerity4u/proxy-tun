@@ -19,7 +19,7 @@ set -eu
 
 LOG_TAG="update-servers"
 SELF="update-servers"
-COUNTRIES="%F0%9F%87%AB%F0%9F%87%B7|%F0%9F%87%AA%F0%9F%87%B8|%F0%9F%87%B8%F0%9F%87%AA|Франция|Испания|Швеция"
+COUNTRIES="%F0%9F%87%A9%F0%9F%87%AA|%F0%9F%87%AA%F0%9F%87%B8|%F0%9F%87%A7%F0%9F%87%AA|Германия|Испания|Бельгия"
 TOP_N=3
 TCP_TIMEOUT=2
 CHECK_TIMEOUT=90
