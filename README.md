@@ -122,7 +122,7 @@ WAN↑  ↑LAN
 - `auto_route`/`strict_route` не используются — OOM через 1-2 дня
 - init.d/sing-box без procd (прямой setsid, иначе форки не влезают в RAM)
 - `sing-box check` ~40 секунд, CHECK_TIMEOUT=90
-- Short-list серверов: Германия | Испания | Бельгия
+- Short-list серверов: Германия | Испания | Бельгия (только `type=tcp`/vision — xhttp-серверы подписки несовместимы с sing-box 1.11)
 
 **Протестировано с sing-box 1.11–1.12.**
 

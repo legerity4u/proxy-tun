@@ -79,7 +79,9 @@ log "подписка: $total серверов"
 # ---------------------------------------------------------------
 # 3. отфильтровать по странам
 # ---------------------------------------------------------------
-filtered=$(echo "$dec" | grep -E "^vless://.*#.*($COUNTRIES)" || true)
+# type=tcp: только vision-TCP серверы совместимы с нашим шаблоном конфига
+# (sing-box 1.11 без XHTTP; xhttp-серверы из подписки отсекаются — см. README «Ограничения»)
+filtered=$(echo "$dec" | grep -E "^vless://.*type=tcp.*#.*($COUNTRIES)" || true)
 filtered_count=$(echo "$filtered" | grep -c . || true)
 log "отфильтровано ($COUNTRIES): $filtered_count"
 
