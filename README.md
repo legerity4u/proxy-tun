@@ -122,7 +122,7 @@ WAN↑  ↑LAN
 - `auto_route`/`strict_route` не используются — OOM через 1-2 дня
 - init.d/sing-box без procd (прямой setsid, иначе форки не влезают в RAM)
 - `sing-box check` ~40 секунд, CHECK_TIMEOUT=90
-- Short-list серверов: США | Канада | Швейцария (только `type=tcp`/vision — xhttp-серверы подписки несовместимы с sing-box)
+- Short-list серверов: пин на Швейцарию-1 (2026-09-05: канал Швейцарии-2 задохнулся ~300B/s, Швейцария-1 проверена пользователем с ПК; только `type=tcp`/vision)
 
 **Протестировано с sing-box 1.11–1.12.**
 
