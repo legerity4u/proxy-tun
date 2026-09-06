@@ -81,7 +81,8 @@ log "подписка: $total серверов"
 # ---------------------------------------------------------------
 # type=tcp: только vision-TCP серверы совместимы с нашим шаблоном конфига
 # (sing-box 1.11 без XHTTP; xhttp-серверы из подписки отсекаются — см. README «Ограничения»)
-filtered=$(echo "$dec" | grep -E "^vless://.*type=tcp.*#.*($COUNTRIES)" || true)
+# :443?: пул 31.56.150.x на :8443 задушен до ~200B/s (замеры 2026-09-05/06), :443 живой
+filtered=$(echo "$dec" | grep -E "^vless://.*type=tcp.*:443\?.*#.*($COUNTRIES)" || true)
 filtered_count=$(echo "$filtered" | grep -c . || true)
 log "отфильтровано ($COUNTRIES): $filtered_count"
 
