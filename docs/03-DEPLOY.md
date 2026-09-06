@@ -257,8 +257,8 @@ nslookup kinopoisk.ru 127.0.0.1 | grep Address
 
 ## Шаг 8. Генерация config.json
 
-Скрипт `update-servers.sh` скачивает подписку, фильтрует по странам (Франция, Швеция,
-Англия), TCP-тестит + замеряет RTT, проверяет Reality handshake через `sing-box check`
+Скрипт `update-servers.sh` скачивает подписку, фильтрует по странам (Швейцария, Нидерланды,
+Франция), TCP-тестит + замеряет RTT, проверяет Reality handshake через `sing-box check`
 и записывает `/etc/sing-box/config.json`.
 
 ```bash

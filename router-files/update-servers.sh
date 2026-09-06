@@ -5,12 +5,12 @@
 #
 #   --dry-run   только показать отбор, config.json не трогать
 #
-# Страны short-list (зашиты): Франция, Швеция, Англия
+# Страны short-list (зашиты): Швейцария, Нидерланды, Франция
 # Матчим по флагам (URL-encoded) — провайдер кодирует названия стран в метках,
 # русские названия оставлены как fallback для старого формата подписки.
+#   🇨🇭 Швейцария = %F0%9F%87%A8%F0%9F%87%AD
+#   🇳🇱 Нидерланды = %F0%9F%87%AA%F0%9F%87%B9
 #   🇫🇷 Франция = %F0%9F%87%AB%F0%9F%87%B7
-#   🇸🇪 Швеция  = %F0%9F%87%B8%F0%9F%87%AA
-#   🇬🇧 Англия  = %F0%9F%87%AC%F0%9F%87%A7
 # Отбор: все серверы этих стран → TCP-test (nc) → топ-3 по RTT
 # → sing-box check (Reality handshake) → первый прошедший → config.json
 # → restart sing-box
@@ -19,7 +19,7 @@ set -eu
 
 LOG_TAG="update-servers"
 SELF="update-servers"
-COUNTRIES="%F0%9F%87%AB%F0%9F%87%B7|%F0%9F%87%B8%F0%9F%87%AA|%F0%9F%87%AC%F0%9F%87%A7|Франция|Швеция|Англия"
+COUNTRIES="%F0%9F%87%A8%F0%9F%87%AD|%F0%9F%87%AA%F0%9F%87%B9|%F0%9F%87%AB%F0%9F%87%B7|Швейцария|Нидерланды|Франция"
 TOP_N=3
 TCP_TIMEOUT=2
 CHECK_TIMEOUT=90
@@ -173,7 +173,7 @@ select_server() {
         "server_name": "$sni",
         "utls": { "enabled": true, "fingerprint": "$fp" }
       },
-      "transport": {}
+      "transport": { "type": "tcp" }
     },
     { "type": "direct", "tag": "direct" }
   ],
@@ -277,7 +277,7 @@ else
         "server_name": "$sni",
         "utls": { "enabled": true, "fingerprint": "$fp" }
       },
-      "transport": {}
+      "transport": { "type": "tcp" }
     },
     { "type": "direct", "tag": "direct" }
   ],
