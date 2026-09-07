@@ -173,7 +173,7 @@ select_server() {
         "server_name": "$sni",
         "utls": { "enabled": true, "fingerprint": "$fp" }
       },
-      "transport": { "type": "tcp" }
+      "transport": {}
     },
     { "type": "direct", "tag": "direct" }
   ],
@@ -277,7 +277,7 @@ else
         "server_name": "$sni",
         "utls": { "enabled": true, "fingerprint": "$fp" }
       },
-      "transport": { "type": "tcp" }
+      "transport": {}
     },
     { "type": "direct", "tag": "direct" }
   ],
