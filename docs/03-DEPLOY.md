@@ -367,7 +367,7 @@ nft list table inet proxy_tun
 
 ```bash
 /etc/init.d/sing-box status   # → running (или PID есть)
-tail -5 /var/log/sing-box.log # → inbound/tun[tun-in]: started at tun0
+tail -5 /overlay/etc/sing-box/sing-box.log # → inbound/tun[tun-in]: started at tun0
 ```
 
 ### Тест с роутера (прямое подключение к серверу)
@@ -385,7 +385,7 @@ curl -sS --max-time 8 -o /dev/null -w 'HTTP %{http_code} time=%{time_total}s\n' 
 
 На роутере:
 ```bash
-tail -f /var/log/sing-box.log | grep 'outbound/vless'
+tail -f /overlay/etc/sing-box/sing-box.log | grep 'outbound/vless'
 # → появятся строки при просмотре YouTube
 ```
 

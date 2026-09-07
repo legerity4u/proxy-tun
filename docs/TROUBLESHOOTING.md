@@ -4,7 +4,7 @@
 
 > **Перед диагностикой:** уточни у пользователя, какой роутер? IP адреса в `private/AGENTS.local.md`.
 
-> **⏰ Часовые пояса в логах:** метки времени в `/var/log/sing-box.log` и в `logread`
+> **⏰ Часовые пояса в логах:** метки времени в `/overlay/etc/sing-box/sing-box.log` и в `logread`
 > идут в **UTC**, а не в локальном времени (TZ). Пока роутер в `Europe/Moscow` (UTC+3),
 > при анализе логов прибавляй **+3 часа** к меткам, чтобы сопоставить с реальным
 > моментом события. Не путай «лог устарел» с «лог актуален» из-за разницы в 3 часа —
@@ -131,7 +131,7 @@ pgrep -la sing-box
 ```bash
 logread | grep -i "sing-box" | tail -20
 # Или:
-tail -30 /var/log/sing-box.log 2>/dev/null
+tail -30 /overlay/etc/sing-box/sing-box.log 2>/dev/null
 ```
 
 Типичные ошибки в логах:
@@ -601,5 +601,5 @@ free -h
 df -h /overlay
 
 echo "=== 7. логи ==="
-tail -20 /var/log/sing-box.log 2>/dev/null
+tail -20 /overlay/etc/sing-box/sing-box.log 2>/dev/null
 ```
