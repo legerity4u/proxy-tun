@@ -11,7 +11,8 @@
 #   🇨🇭 Швейцария = %F0%9F%87%A8%F0%9F%87%AD
 #   🇳🇱 Нидерланды = %F0%9F%87%AA%F0%9F%87%B9
 #   🇫🇷 Франция = %F0%9F%87%AB%F0%9F%87%B7
-# Отбор: все серверы этих стран → TCP-test (nc) → топ-3 по RTT
+# Отбор: все серверы этих стран → фильтр type=tcp (sing-box не умеет xhttp)
+# → TCP-test (nc) → топ-3 по RTT
 # → sing-box check (Reality handshake) → первый прошедший → config.json
 # → restart sing-box
 # SKIP_N=N (env) — пропустить первые N серверов по RTT (топовый проходит
@@ -100,6 +101,14 @@ echo "$filtered" | while IFS= read -r line; do
     url=${url%%#*}
     host=${url#*@}; host=${host%%:*}
     rest=${url#*:}; port=${rest%%[^0-9]*}
+
+    # sing-box не поддерживает xhttp (и др. не-tcp транспорты) — узлы провайдера
+    # с type=xhttp генерируют конфиг с живым TCP, но мёртвым data-слоем (2026-09-09)
+    ltype=$(echo "$url" | sed -n 's/.*[?&]type=\([^&]*\).*/\1/p')
+    if [ -n "$ltype" ] && [ "$ltype" != "tcp" ]; then
+        log "SKIP $host:$port (type=$ltype — sing-box не поддерживает)"
+        continue
+    fi
 
     start=$EPOCHREALTIME
     if timeout $TCP_TIMEOUT nc "$host" "$port" < /dev/null 2>/dev/null; then
