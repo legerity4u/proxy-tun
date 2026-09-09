@@ -14,6 +14,8 @@
 # Отбор: все серверы этих стран → TCP-test (nc) → топ-3 по RTT
 # → sing-box check (Reality handshake) → первый прошедший → config.json
 # → restart sing-box
+# SKIP_N=N (env) — пропустить первые N серверов по RTT (топовый проходит
+# check, но канал деградирован — «не тот сервер»): SKIP_N=1 /etc/sing-box/update-servers.sh
 
 set -eu
 
@@ -21,6 +23,7 @@ LOG_TAG="update-servers"
 SELF="update-servers"
 COUNTRIES="%F0%9F%87%A8%F0%9F%87%AD|%F0%9F%87%AA%F0%9F%87%B9|%F0%9F%87%AB%F0%9F%87%B7|Швейцария|Нидерланды|Франция"
 TOP_N=3
+SKIP_N=${SKIP_N:-0}
 TCP_TIMEOUT=2
 CHECK_TIMEOUT=90
 
@@ -112,11 +115,18 @@ log "TCP-test: $(wc -l < "$results") живы, топ по RTT:"
 sort -n "$results" | head -5 | awk '{print "\t" $1 "ms " substr($0, index($0,$2))}' | while IFS= read -r l; do log "$l"; done
 
 # ---------------------------------------------------------------
-# 5. взять топ-3 по RTT
+# 5. взять топ-3 по RTT (с пропуском SKIP_N первых)
 # ---------------------------------------------------------------
-top_n=$(sort -n "$results" | head -$TOP_N)
+top_n=$(sort -n "$results" | head -$((TOP_N + SKIP_N)) | tail -n +$((SKIP_N + 1)))
 top_count=$(echo "$top_n" | grep -c . || true)
-log "топ-${TOP_N}: ${top_count} серверов"
+if [ "$SKIP_N" -gt 0 ]; then
+    log "SKIP_N=${SKIP_N}: пропускаю первые ${SKIP_N} по RTT"
+fi
+log "топ-${TOP_N} (после skip): ${top_count} серверов"
+if [ "$top_count" -eq 0 ]; then
+    log "ERR: SKIP_N=${SKIP_N} исчерпал все живые серверы ($(wc -l < "$results"))"
+    exit 1
+fi
 
 # ---------------------------------------------------------------
 # 6. sing-box check для каждого из топ-3
