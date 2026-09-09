@@ -54,7 +54,7 @@ apk update && apk add sing-box
 
 **Проверка:**
 ```bash
-sing-box version | head -1   # → sing-box version 1.11.x или 1.12.x
+sing-box version | head -1   # → sing-box version 1.13.x (проверено 1.13.21; см. Приложение C)
 ```
 
 > Пакеты `bash`, `jq`, `curl`, `ip-full`, `nftables-json`, `kmod-tun` — должны быть
@@ -191,10 +191,11 @@ nft list chain inet fw4 accept_to_vpn 2>/dev/null
 # 1. Не использовать DNS из WAN-DHCP (провайдерские резолверы могут травить ответы)
 uci set dhcp.@dnsmasq[0].noresolv='1'
 
-# 2. Чистые upstream (8.8.8.8/9.9.9.9 — проверены, не отравляются)
+# 2. Чистые upstream (9.9.9.9 + 1.0.0.1 — рабочая связка, проверена на даче Asus;
+#    8.8.8.8 убран 2026-09-09 — нестабилен за агрессивным DPI)
 uci delete dhcp.@dnsmasq[0].server 2>/dev/null
-uci add_list dhcp.@dnsmasq[0].server='8.8.8.8'
 uci add_list dhcp.@dnsmasq[0].server='9.9.9.9'
+uci add_list dhcp.@dnsmasq[0].server='1.0.0.1'
 
 # 3. Не кэшировать NXDOMAIN (иначе отравленный ответ «залипает» на часы)
 uci set dhcp.@dnsmasq[0].nonegcache='1'
@@ -423,7 +424,7 @@ jq -e '
 
 ---
 
-## Приложение B. Ротация Reality-ключей
+## Приложение B. Ротация Reality-ключей и подводные камни подписки
 
 Провайдер периодически меняет `public_key` / `short_id`. Если YouTube перестал работать:
 
@@ -432,6 +433,53 @@ jq -e '
 ```
 
 Если скрипт не находит рабочий сервер — проверьте `subscription.url`
+
+Подводные камни (2026-09-09, MR3020):
+
+- **`short_id` ротируется при каждом fetch подписки** — «вчера работал, сегодня нет»
+  лечится повторным `update-servers.sh`, а не откатом конфига.
+- **Часть узлов подписки переехала на `type=xhttp`** — sing-box этот транспорт
+  НЕ поддерживает (Xray-only; работает в Happ/NekoBox на Xray-ядре). Скрипт
+  такие узлы пропускает (`SKIP ... type=xhttp` в logread) — не удаляйте этот фильтр.
+- **Узел может проходить TCP-test и `sing-box check`, но душиться по throughput**
+  (RTT живой, bulk <1 KB/s). `sing-box check` — офлайн-валидация, канал он не меряет.
+  Решающий тест — bulk-curl страницы через `--interface tun0` (см. Сценарий И
+  в TROUBLESHOOTING.md).
+
+---
+
+## Приложение C. Ручное обновление sing-box (когда opkg отстаёт)
+
+Проверено 2026-09-09 на MR3020 (mipsel_24kc): апгрейд 1.11.15 → 1.13.21.
+XHTTP не поддерживается ни одной версией sing-box — апгрейд ради него бесполезен.
+
+```bash
+# 1. Скачать с ПК (проверить наличие asset для своей архитектуры):
+curl -sS "https://api.github.com/repos/SagerNet/sing-box/releases?per_page=15" \
+    | jq -r '[.[] | select(.prerelease==false)][0].tag_name'
+# asset: sing-box-<ver>-linux-mipsle-softfloat.tar.gz  (MR3020/RT-AC1200 — mipsle, soft-float)
+
+# 2. Залить на роутер (scp -O — dropbear без sftp; в /tmp не класть — tmpfs 28MB!):
+scp -O -i ~/.ssh/id_rsa_legerity4u sing-box root@<ROUTER_IP>:/root/sing-box-new
+
+# 3. На роутере (RAM-safe: бэкап → kill → замена → проверка версии):
+cp -p /usr/bin/sing-box /root/sing-box.bak
+killall -9 sing-box; sleep 3
+cp -p /root/sing-box-new /usr/bin/sing-box && chmod +x /usr/bin/sing-box && sync
+sing-box version | head -1
+
+# 4. Пересобрать конфиг и запустить:
+/etc/sing-box/update-servers.sh
+
+# ⚠️ Перед тяжёлыми операциями (sing-box check) на 64 MB RAM поднимите swap:
+dd if=/dev/zero of=/overlay/swapfile bs=1M count=256
+chmod 600 /overlay/swapfile && mkswap /overlay/swapfile && swapon /overlay/swapfile
+# persist: uci add fstab swap; uci set fstab.@swap[-1].device='/overlay/swapfile';
+#          uci set fstab.@swap[-1].enabled='1'; uci commit fstab
+```
+
+> opkg-база после ручной замены остаётся на старой версии — будущий
+> `opkg upgrade sing-box` перезапишет бинарник. Держите бэкап `/root/sing-box.bak`.
 
 ---
 
@@ -450,6 +498,6 @@ jq -e '
 | `/etc/init.d/singbox-pbr` | `router-files/singbox-pbr` |
 | `/etc/iproute2/rt_tables` | строка `100 youtube` |
 | `/etc/config/firewall` | zone `vpn` + forwarding lan→vpn |
-| `/etc/config/dhcp` | server=1.1.1.1,8.8.4.4 |
+| `/etc/config/dhcp` | server=9.9.9.9,1.0.0.1 |
 | sing-box запущен, tun0 UP | шаг 11 |
 | cron: `0 2 * * * auto-update.sh` | шаг 10 |

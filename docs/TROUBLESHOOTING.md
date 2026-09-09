@@ -25,6 +25,7 @@
 | Кинопоиск / VK Видео: не грузятся | **Сценарий Д** |
 | Ajax Hub: нет соединения с Ethernet, сервера не видны | **Сценарий Д2** |
 | YouTube на Smart TV: чёрный экран при старте приложения (iPhone при этом работает) | **Сценарий Ж** |
+| YouTube: не работает на ВСЕХ устройствах; туннель жив (204 OK), но страницы/видео грузятся крошками (<10 KB/s) | **Сценарий И** |
 | Роутер завис, SSH не отвечает | **Сценарий Е** |
 
 ---
@@ -411,7 +412,7 @@ nslookup youtubei.googleapis.com 127.0.0.1 | grep Address
 
 ```bash
 uci get dhcp.@dnsmasq[0].noresolv   # должно быть '1'
-uci get dhcp.@dnsmasq[0].server     # чистые резолверы (8.8.8.8, 9.9.9.9)
+uci get dhcp.@dnsmasq[0].server     # чистые резолверы (9.9.9.9, 1.0.0.1)
 ```
 
 Если `noresolv` не задан — dnsmasq, помимо списка `server=`, использует DNS из
@@ -430,8 +431,8 @@ nslookup youtube.com 8.8.8.8     # прямой запрос (не через dn
 ```bash
 uci set dhcp.@dnsmasq[0].noresolv='1'          # не брать DNS из WAN-DHCP
 uci delete dhcp.@dnsmasq[0].server 2>/dev/null
-uci add_list dhcp.@dnsmasq[0].server='8.8.8.8'
 uci add_list dhcp.@dnsmasq[0].server='9.9.9.9'
+uci add_list dhcp.@dnsmasq[0].server='1.0.0.1'
 uci set dhcp.@dnsmasq[0].nonegcache='1'        # NXDOMAIN не кэшировать
 cat >> /etc/hosts <<'EOF'
 172.217.20.174   youtube.com
@@ -446,7 +447,8 @@ uci commit dhcp
 > по форме пакета dnsmasq (EDNS0 + 0x20-рандомизация регистра) — даже запросы
 > dnsmasq к `8.8.8.8` получают NXDOMAIN, тогда как прямой `nslookup youtube.com 8.8.8.8`
 > проходит. Поэтому единственный надёжный обход для этих 2 имён — hosts-записи
-> (резолв без upstream). Остальные домены резолвятся штатно через 8.8.8.8/9.9.9.9.
+> (резолв без upstream). Остальные домены резолвятся штатно через 9.9.9.9/1.0.0.1
+> (связка как на даче; 8.8.8.8 как upstream убран 2026-09-09).
 
 ### Как проверить что помогло
 
@@ -465,6 +467,68 @@ nslookup youtube.com 127.0.0.1 | grep Address
   DNS работает рывками, ломает и iPhone. Не использовать.
 - **https-dns-proxy (DoH)**: пакет из 23.05.6 на mipsel_24kc зависает в D-state
   (не отвечает на запросы, неубиваем, 94% CPU). Требует перезагрузки роутера.
+
+---
+
+## Сценарий И: Туннель «жив» (204 OK), а YouTube не грузится на всех устройствах
+
+**Что видит пользователь:** YouTube не работает ни на ТВ, ни на телефоне. При этом
+SSH на роутер есть, tun0 поднят, `curl --interface tun0 .../generate_204` возвращает
+204. Страницы и видео грузятся крошками или не грузятся совсем.
+
+**Корень проблемы (2026-09-09, MR3020):** провайдер квартиры душит **throughput**
+до диапазона провайдера подписки (`31.56.150.x`). RTT живой (TCP-тест и `sing-box
+check` проходят!), но bulk-трафик через туннель — сотни байт/сек. Диагноз «сервер
+работает» по 204 — ложный: 204-ответ крошечный и пролезает даже через мёртвый канал.
+
+Второй подвох того же дня: часть узлов подписки переехала на `type=xhttp` —
+sing-box не умеет этот транспорт (Xray-only). TCP+Reality до такого узла
+устанавливается, но VLESS-слой молчит → соединения «есть», данных нет.
+
+### Как проверить
+
+**Шаг 1 — bulk-тест (решающий, 204 недостаточно):**
+
+```bash
+# страница ~1 MB — если <10 KB/s, канал задушен
+curl --interface tun0 -m 20 -sS -o /dev/null \
+    -w 'page: %{http_code} %{size_download}B %{time_total}s (%{speed_download}B/s)\n' \
+    https://www.youtube.com/
+curl --interface tun0 -m 20 -sS -o /dev/null \
+    -w 'img: %{http_code} %{size_download}B %{time_total}s\n' \
+    https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg
+```
+
+**Шаг 2 — контрольный A/B: тот же объём напрямую через WAN:**
+
+```bash
+curl -m 20 -sS -o /dev/null \
+    -w 'WAN: %{size_download}B %{speed_download}B/s\n' \
+    "https://speed.cloudflare.com/__down?bytes=2000000"
+curl --interface tun0 -m 20 -sS -o /dev/null \
+    -w 'TUN: %{size_download}B %{speed_download}B/s\n' \
+    "https://speed.cloudflare.com/__down?bytes=2000000"
+# WAN быстрый + TUN задушен → душится путь к узлу (или сам узел), не роутер и не DNS
+```
+
+**Шаг 3 — узел не xhttp?** `update-servers.sh` скипает не-tcp узлы
+(`SKIP ... type=xhttp` в logread). Если в конфиг попал xhttp-узел (транспорт в
+подписке меняется) — конфиг надо пересобрать с tcp-узлом.
+
+### Как исправить
+
+```bash
+/etc/sing-box/update-servers.sh        # свежая подписка = свежие sid + другой узел
+# если снова выбрал душащийся узел: SKIP_N=1 /etc/sing-box/update-servers.sh
+```
+
+Если задушен весь шорт-лист (все узлы в одном диапазоне) — искать в подписке
+узлы вне диапазона или поднимать Xray-core ради xhttp-узлов (см. лог анализа
+2026-09-09: Япония/Бельгия вне `31.56.150.x`).
+
+### Как проверить что помогло
+
+Повторить bulk-тест: `page` должен отдавать сотни KB/s. Потом YouTube на устройстве.
 
 ---
 
