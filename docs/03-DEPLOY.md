@@ -108,7 +108,7 @@ cat router-files/proxy-tun.d/ajax.nft | ssh $ROUTER "cat > /etc/sing-box/proxy-t
 # init.d скрипт для PBR watcher
 cat router-files/singbox-pbr | ssh $ROUTER "cat > /etc/init.d/singbox-pbr"
 
-# Автообновление (cron 02:00) + healthcheck ротации ключей
+# Автообновление (cron каждые 2 часа) + healthcheck ротации ключей
 cat router-files/auto-update.sh | ssh $ROUTER "cat > /etc/sing-box/auto-update.sh"
 cat router-files/tun-healthcheck.sh | ssh $ROUTER "cat > /etc/sing-box/tun-healthcheck.sh"
 
@@ -313,13 +313,13 @@ logread | grep -i "sing-box" | tail -20
 
 ---
 
-## Шаг 10. Автообновление (cron 02:00) + healthcheck ключей
+## Шаг 10. Автообновление (cron каждые 2 часа) + healthcheck ключей
 
-Ежедневное автообновление и проверка ротации Reality-ключей:
+Автообновление каждые 2 часа и проверка ротации Reality-ключей:
 
 ```bash
-# cron 02:00: auto-update.sh (update + проверка check_state)
-echo '0 2 * * * /etc/sing-box/auto-update.sh >> /var/log/singbox-autoupdate.log 2>&1' \
+# cron: auto-update.sh каждые 2 часа (update + проверка check_state)
+echo '0 */2 * * * /etc/sing-box/auto-update.sh >> /var/log/singbox-autoupdate.log 2>&1' \
     | crontab -
 
 # healthcheck запускается watcher'ом раз в час (tun-healthcheck.sh вызывается из singbox-pbr-watch.sh)
@@ -327,7 +327,7 @@ echo '0 2 * * * /etc/sing-box/auto-update.sh >> /var/log/singbox-autoupdate.log 
 
 **Проверка:**
 ```bash
-crontab -l   # → 0 2 * * * /etc/sing-box/auto-update.sh ...
+crontab -l   # → 0 */2 * * * /etc/sing-box/auto-update.sh ...
 ```
 
 > `auto-update.sh` не берёт код возврата `update-servers.sh` за критерий успеха —
@@ -488,7 +488,7 @@ chmod 600 /overlay/swapfile && mkswap /overlay/swapfile && swapon /overlay/swapf
 | Файл / состояние | Источник |
 |---|---|
 | `/etc/sing-box/update-servers.sh` | `router-files/update-servers.sh` |
-| `/etc/sing-box/auto-update.sh` | `router-files/auto-update.sh` (cron 02:00, шаг 10) |
+| `/etc/sing-box/auto-update.sh` | `router-files/auto-update.sh` (cron `0 */2`, шаг 10) |
 | `/etc/sing-box/tun-healthcheck.sh` | `router-files/tun-healthcheck.sh` (healthcheck ключей) |
 | `/etc/sing-box/singbox-pbr-watch.sh` | `router-files/singbox-pbr-watch.sh` |
 | `/etc/sing-box/subscription.url` | создан на шаге 2 |
@@ -500,4 +500,4 @@ chmod 600 /overlay/swapfile && mkswap /overlay/swapfile && swapon /overlay/swapf
 | `/etc/config/firewall` | zone `vpn` + forwarding lan→vpn |
 | `/etc/config/dhcp` | server=9.9.9.9,1.0.0.1 |
 | sing-box запущен, tun0 UP | шаг 11 |
-| cron: `0 2 * * * auto-update.sh` | шаг 10 |
+| cron: `0 */2 * * * auto-update.sh` | шаг 10 |
