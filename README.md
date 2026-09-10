@@ -52,7 +52,7 @@ WAN↑  ↑LAN
 | **VPN-клиент** | sing-box TUN + VLESS Reality (xtls-rprx-vision + xudp) |
 | **Смена сервера** | `update-servers.sh` — автовыбор сервера из подписки по RTT + Reality handshake |
 | **Автообновление** | cron 02:00 `auto-update.sh` — прогоняет update-servers.sh и проверяет `check_state` (sing-box/tun0/table 100) |
-| **Ротация ключей** | `tun-healthcheck.sh` раз в час сверяет pbk/sid сервера с подпиской; при смене — перезапуск update-servers.sh |
+| **Ротация ключей** | `tun-healthcheck.sh` (cron 15,45 * * * *) сверяет всю секцию параметров outbound (pbk/sid/sni/fp/flow) со всеми строками подписки; при расхождении — перезапуск update-servers.sh |
 
 > **Нюанс таблицы 100:** таблица зарегистрирована как `100 youtube` в `/etc/iproute2/rt_tables`,
 > поэтому `ip rule show` печатает `lookup youtube`, а не `lookup 100`. Проверки и грепы должны
@@ -82,7 +82,7 @@ WAN↑  ↑LAN
 | `/etc/sing-box/config.json` | sing-box TUN inbound + outbounds (proxy/direct) + route rules |
 | `/etc/sing-box/update-servers.sh` | Скачивает подписку, выбирает сервер по RTT + handshake, генерирует config.json, поднимает PBR-маршруты |
 | `/etc/sing-box/auto-update.sh` | Ежедневное автообновление (cron 02:00): update-servers.sh + проверка `check_state` |
-| `/etc/sing-box/tun-healthcheck.sh` | Раз в час сверяет Reality-ключи (pbk/sid) с подпиской; при ротации — перезапуск |
+| `/etc/sing-box/tun-healthcheck.sh` | Сверяет всю секцию параметров outbound (pbk/sid/sni/fp/flow) со всеми строками подписки для хоста; при расхождении — перезапуск. Cron 15,45 * * * * + вызов из watcher |
 | `/etc/sing-box/singbox-pbr-watch.sh` | Следит за tun0, добавляет/восстанавливает ip rule + routes в table 100, запускает healthcheck |
 | `/etc/sing-box/proxy-tun.nft` | Таблица `inet proxy_tun`: PBR-маркировка + QUIC block. Опциональные ресурсы — include из `/etc/sing-box/proxy-tun.d/` |
 | `/etc/iproute2/rt_tables` | Определяет таблицу `100 youtube` |
@@ -140,7 +140,7 @@ proxy-tun/
 ├── router-files/                 ← файлы для установки на роутер
 │   ├── update-servers.sh         ← генерация config.json + автовыбор сервера
 │   ├── auto-update.sh            ← ежедневный cron: update + проверка check_state
-│   ├── tun-healthcheck.sh        ← проверка ротации Reality-ключей (раз в час)
+│   ├── tun-healthcheck.sh        ← сверка секции параметров outbound с подпиской (cron 15,45)
 │   ├── proxy-tun.nft             ← таблица nftables (PBR + QUIC block, youtube всегда)
 │   ├── proxy-tun.d/
 │   │   └── ajax.nft              ← опциональный модуль Ajax Hub (include из proxy-tun.nft)
