@@ -95,7 +95,7 @@ gen_config() {
 
     cat > "$CONF_FILE" <<EOF
 {
-  "log": { "level": "info", "output": "/overlay/etc/sing-box/sing-box.log", "timestamp": true },
+  "log": { "level": "warn", "output": "/overlay/etc/sing-box/sing-box.log", "timestamp": true },
   "inbounds": [{
     "type": "tun", "tag": "tun-in", "interface_name": "tun0",
     "address": ["172.19.0.1/30"], "mtu": 1500,
