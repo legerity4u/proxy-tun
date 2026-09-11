@@ -33,7 +33,7 @@ start() {
     echo "sing-box started PID=$!"
 
     for i in $(seq 30); do
-        ip -4 addr show tun0 2>/dev/null | grep -q "inet " && break
+        [ -d /sys/class/net/tun0 ] && break
         sleep 2
     done
 
@@ -45,7 +45,11 @@ start() {
         sleep 2
     done
     ip route replace 192.168.1.0/24 dev br-lan scope link table 100 2>/dev/null
-    logger -t sing-box "PBR routes added for tun0"
+    if ip route show table 100 | grep -q "default dev tun0"; then
+        logger -t sing-box "PBR routes added for tun0"
+    else
+        logger -t sing-box "WARN: table 100 route missing after boot wait"
+    fi
 }
 
 stop() {
