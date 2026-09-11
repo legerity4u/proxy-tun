@@ -258,28 +258,32 @@ nslookup kinopoisk.ru 127.0.0.1 | grep Address
 
 ## Шаг 8. Генерация config.json
 
-Скрипт `update-servers.sh` скачивает подписку, фильтрует по странам (Швейцария, Нидерланды,
-Франция), TCP-тестит + замеряет RTT, проверяет Reality handshake через `sing-box check`
-и записывает `/etc/sing-box/config.json`.
+Скрипт `update-servers.sh` скачивает подписку, отбирает живые type=tcp узлы (xhttp скипается —
+sing-box его не умеет), перемешивает их случайно и перебирает по одному до первого рабочего:
+для каждого кандидата генерируется config.json, рестартует sing-box и делается live-тест
+канала через tun0 (generate_204 + bulk ≥ 50 KB/s). Первый прошедший остаётся активным.
+Опциональный фильтр стран — `COUNTRIES` env (по умолчанию все узлы подписки).
 
 ```bash
 /etc/sing-box/update-servers.sh
 ```
 
-Процесс занимает ~90-120 секунд (на 64 MB RAM check ~40 сек на сервер).
+Процесс: ~2-4 минуты на рабочего кандидата (рестарт + live-тест); при нескольких мёртвых
+подряд — дольше. `--dry-run` показывает случайный порядок кандидатов, ничего не меняя.
 
 **Проверка:**
 ```bash
-# Конфиг валиден
-sing-box check -c /etc/sing-box/config.json
-
 # auto_route/strict_route выключены
 jq -e '.inbounds[0].auto_route == false and .inbounds[0].strict_route == false' \
     /etc/sing-box/config.json && echo "OK"
 
 # Структура outbound
 jq '.outbounds[0].server, .outbounds[0].server_port' /etc/sing-box/config.json
-# → "<server>.live" 443
+# → "<server>" 443
+
+# Решающий тест — bulk через tun0 (см. TROUBLESHOOTING.md Сценарий И)
+curl --interface tun0 -m 15 -sS -o /dev/null \
+    -w "bulk: %{speed_download}B/s\n" "https://speed.cloudflare.com/__down?bytes=300000"
 ```
 
 ---
@@ -443,7 +447,9 @@ jq -e '
   такие узлы пропускает (`SKIP ... type=xhttp` в logread) — не удаляйте этот фильтр.
 - **Узел может проходить TCP-test и `sing-box check`, но душиться по throughput**
   (RTT живой, bulk <1 KB/s). `sing-box check` — офлайн-валидация, канал он не меряет.
-  Решающий тест — bulk-curl страницы через `--interface tun0` (см. Сценарий И
+  С 2026-09-11 скрипт сам меряет канал: live-тест (204 + bulk ≥50 KB/s через tun0)
+  для каждого кандидата в случайном порядке — задушенный отсекается автоматически.
+  Ручная проверка: bulk-curl через `--interface tun0` (см. Сценарий И
   в TROUBLESHOOTING.md).
 
 ---

@@ -50,7 +50,7 @@ WAN↑  ↑LAN
 | **QUIC block** | UDP/443 к YouTube дропается на forward → TCP fallback (иначе xudp hole punching не работает на >200ms latency) |
 | **Reply клиентам LAN** | MASQUERADE на tun0 (fw4 zone vpn) + второй маршрут `192.168.x.0/24 dev br-lan` в table 100 |
 | **VPN-клиент** | sing-box TUN + VLESS Reality (xtls-rprx-vision + xudp) |
-| **Смена сервера** | `update-servers.sh` — автовыбор сервера из подписки по RTT + Reality handshake |
+| **Смена сервера** | `update-servers.sh` — случайный перебор живых узлов из подписки с live-тестом канала (204 + bulk ≥50 KB/s через tun0), до первого рабочего |
 | **Автообновление** | cron `0 */2` (каждые 2 часа) `auto-update.sh` — прогоняет update-servers.sh и проверяет `check_state` (sing-box/tun0/table 100) |
 | **Ротация ключей** | `tun-healthcheck.sh` (cron 15,45 * * * *) сверяет всю секцию параметров outbound (pbk/sid/sni/fp/flow) со всеми строками подписки; при расхождении — перезапуск update-servers.sh |
 
@@ -64,7 +64,7 @@ WAN↑  ↑LAN
 
 Каждые 2 часа (`0 */2 * * *`, с 2026-09-11; ранее ежедневно в 02:00) cron запускает `/etc/sing-box/auto-update.sh` (лог: `/var/log/singbox-autoupdate.log`):
 
-1. `/etc/sing-box/update-servers.sh` — обновляет подписку, перевыбирает сервер по RTT, перегенерирует config.json, рестартует sing-box.
+1. `/etc/sing-box/update-servers.sh` — обновляет подписку, случайно перебирает живые узлы до первого с рабочим каналом (live-тест bulk), перегенерирует config.json, рестартует sing-box.
 2. Ждёт подъём sing-box + tun0 (до 90s).
 3. `check_state` — проверяет 5 критериев: sing-box жив, tun0 `inet`, table 100 содержит `default dev tun0` и `192.168.1.0/24 dev br-lan`, ip rule `fwmark 0x64 lookup youtube`. Ретрай до 40s (watcher поднимает маршруты с задержкой).
 4. Итог: `OK:` или `ERR:` + `exit 1`.
@@ -80,7 +80,7 @@ WAN↑  ↑LAN
 | Компонент | Роль |
 |-----------|------|
 | `/etc/sing-box/config.json` | sing-box TUN inbound + outbounds (proxy/direct) + route rules |
-| `/etc/sing-box/update-servers.sh` | Скачивает подписку, выбирает сервер по RTT + handshake, генерирует config.json, поднимает PBR-маршруты |
+| `/etc/sing-box/update-servers.sh` | Скачивает подписку, случайно перебирает type=tcp узлы с live-тестом канала (204 + bulk), генерирует config.json, поднимает PBR-маршруты |
 | `/etc/sing-box/auto-update.sh` | Автообновление (cron `0 */2`, каждые 2 часа): update-servers.sh + проверка `check_state` |
 | `/etc/sing-box/tun-healthcheck.sh` | Сверяет всю секцию параметров outbound (pbk/sid/sni/fp/flow) со всеми строками подписки для хоста; при расхождении — перезапуск. Cron 15,45 * * * * + вызов из watcher |
 | `/etc/sing-box/singbox-pbr-watch.sh` | Следит за tun0, добавляет/восстанавливает ip rule + routes в table 100, запускает healthcheck |
@@ -138,7 +138,7 @@ proxy-tun/
 ├── private/
 │   └── AGENTS.local.md           ← приватные данные площадок (не коммитить)
 ├── router-files/                 ← файлы для установки на роутер
-│   ├── update-servers.sh         ← генерация config.json + автовыбор сервера
+│   ├── update-servers.sh         ← генерация config.json + случайный перебор узлов с live-тестом
 │   ├── auto-update.sh            ← cron каждые 2 часа: update + проверка check_state
 │   ├── tun-healthcheck.sh        ← сверка секции параметров outbound с подпиской (cron 15,45)
 │   ├── proxy-tun.nft             ← таблица nftables (PBR + QUIC block, youtube всегда)
