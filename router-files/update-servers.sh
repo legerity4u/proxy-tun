@@ -6,7 +6,10 @@
 #
 # Алгоритм (2026-09-11, замена «топ-3 по RTT + sing-box check»):
 #   1. подписка → все vless://; скип type=xhttp (sing-box не умеет не-tcp);
-#      COUNTRIES env (опционально) — regexp-фильтр по фрагменту; по умолчанию ВСЕ узлы
+#      скип узлов, чьё имя содержит Россия|Torrent|GAMING (EXCLUDE_RE,
+#      регистронезависимо; имя фрагмента декодируется из URL-encoding);
+#      COUNTRIES env (опционально) — regexp-белый список по имени;
+#      по умолчанию — все узлы, кроме чёрного списка
 #   2. TCP-test (nc) — дешёвый отсев мёртвых портов
 #   3. перемешать случайно (seed из /dev/urandom)
 #   4. для каждого кандидата, до первого рабочего:
@@ -21,7 +24,11 @@
 #
 # Env:
 #   BULK_MIN_KBPS=50      порог «канал жив» в KB/s
-#   COUNTRIES="regexp"    опциональный фильтр по фрагменту узла (по умолчанию — все)
+#   COUNTRIES="regexp"    опц. белый список по имени узла (по умолчанию — все не-исключённые)
+#   EXCLUDE_RE="Россия|Torrent|GAMING"
+#                         чёрный список подстрок в имени узла (регистронезависимо);
+#                         провайдер метит так узлы не для нас: Россия — прямые,
+#                         Torrent/GAMING — нерекомендованные
 
 set -eu
 
@@ -36,10 +43,14 @@ START_TS=$(date '+%T')
 BULK_MIN_KBPS=${BULK_MIN_KBPS:-50}
 BULK_URL="https://speed.cloudflare.com/__down?bytes=300000"
 COUNTRIES=${COUNTRIES:-}
+EXCLUDE_RE=${EXCLUDE_RE:-"Россия|Torrent|GAMING"}
 
 [ "${1:-}" = "--dry-run" ] && DRY_RUN=true
 
 log() { local ts; ts=$(date '+%T'); logger -t "$LOG_TAG" "[$ts] $*"; echo "[$ts] $*"; }
+
+# фрагмент-имя провайдер URL-кодирует (%D0%A0… = «Россия») — для фильтров нужен UTF-8
+urldecode() { printf '%b' "${1//%/\\x}"; }
 
 cleanup() { rm -rf "$TMPDIR"; }
 trap cleanup EXIT
@@ -225,13 +236,9 @@ total=$(echo "$dec" | grep -c "^vless://" || true)
 log "подписка: $total серверов"
 
 # ---------------------------------------------------------------
-# 2. кандидаты: только vless-строки, скип не-tcp; COUNTRIES env — опц. фильтр
+# 2. кандидаты: только vless-строки; скип не-tcp; фильтры по имени узла
 # ---------------------------------------------------------------
 src_lines=$(echo "$dec" | grep -E "^vless://" || true)
-if [ -n "$COUNTRIES" ]; then
-    src_lines=$(echo "$src_lines" | grep -E "#.*($COUNTRIES)" || true)
-    log "фильтр стран ($COUNTRIES): $(echo "$src_lines" | grep -c . || true)"
-fi
 
 cands="$TMPDIR/cands.txt"
 : > "$cands"
@@ -243,6 +250,14 @@ echo "$src_lines" | while IFS= read -r line; do
     host=${url#*@}; host=${host%%:*}
     rest=${url#*:}; port=${rest%%[^0-9]*}
 
+    case "$line" in *#*) frag=${line#*#} ;; *) frag="" ;; esac
+    frag_dec=$(urldecode "$frag")
+
+    # COUNTRIES env — опц. белый список (regexp по декодированному имени)
+    if [ -n "$COUNTRIES" ] && ! printf '%s' "$frag_dec" | grep -qE "$COUNTRIES"; then
+        continue
+    fi
+
     # sing-box не поддерживает xhttp (и др. не-tcp транспорты) — узлы провайдера
     # с type=xhttp генерируют конфиг с живым TCP, но мёртвым data-слоем (2026-09-09)
     ltype=$(echo "$url" | sed -n 's/.*[?&]type=\([^&]*\).*/\1/p')
@@ -251,12 +266,19 @@ echo "$src_lines" | while IFS= read -r line; do
         continue
     fi
 
+    # чёрный список имён (регистронезависимо): Россия — прямые узлы,
+    # Torrent/GAMING — провайдер метит узлы не для нашей задачи
+    if printf '%s' "$frag_dec" | grep -qiE "$EXCLUDE_RE"; then
+        log "SKIP $host:$port (исключён по имени: $frag_dec)"
+        continue
+    fi
+
     echo "$line" >> "$cands"
 done
 
 cands_n=$(wc -l < "$cands")
 [ "$cands_n" -eq 0 ] && { log "ERR: нет валидных vless-кандидатов"; exit 1; }
-log "кандидатов (type=tcp): $cands_n"
+log "кандидатов (tcp, не из чёрного списка): $cands_n"
 
 # ---------------------------------------------------------------
 # 3. TCP-test — дешёвый отсев мёртвых портов
@@ -293,7 +315,7 @@ if $DRY_RUN; then
         url=${line#vless://}; url=${url%%#*}
         case "$line" in *#*) frag=${line#*#} ;; *) frag="" ;; esac
         hp=${url#*@}; hp=${hp%%\?*}
-        log "  $hp ($frag)"
+        log "  $hp ($(urldecode "$frag"))"
     done < "$order"
     exit 0
 fi
@@ -310,7 +332,7 @@ while IFS= read -r line; do
     url=${line#vless://}; url_nf=${url%%#*}
     case "$line" in *#*) frag=${line#*#} ;; *) frag="" ;; esac
     hp=${url_nf#*@}; hp=${hp%%\?*}
-    log "[$attempt/$alive_n] $hp ($frag)"
+    log "[$attempt/$alive_n] $hp ($(urldecode "$frag"))"
 
     kill_singbox || exit 1
     gen_config "$line"
@@ -322,7 +344,7 @@ while IFS= read -r line; do
     if live_test; then
         log "  OK: $LIVE_RESULT"
         winner=$hp
-        log "выбран: $winner ($frag) — попытка $attempt из $alive_n"
+        log "выбран: $winner ($(urldecode "$frag")) — попытка $attempt из $alive_n"
         break
     fi
     log "  FAIL ($LIVE_RESULT)"

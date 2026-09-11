@@ -50,7 +50,7 @@ WAN↑  ↑LAN
 | **QUIC block** | UDP/443 к YouTube дропается на forward → TCP fallback (иначе xudp hole punching не работает на >200ms latency) |
 | **Reply клиентам LAN** | MASQUERADE на tun0 (fw4 zone vpn) + второй маршрут `192.168.x.0/24 dev br-lan` в table 100 |
 | **VPN-клиент** | sing-box TUN + VLESS Reality (xtls-rprx-vision + xudp) |
-| **Смена сервера** | `update-servers.sh` — случайный перебор живых узлов из подписки с live-тестом канала (204 + bulk ≥50 KB/s через tun0), до первого рабочего |
+| **Смена сервера** | `update-servers.sh` — случайный перебор живых узлов из подписки с live-тестом канала (204 + bulk ≥50 KB/s через tun0), до первого рабочего; чёрный список имён (Россия/Torrent/GAMING) отсекается до тестирования |
 | **Автообновление** | cron `0 */2` (каждые 2 часа) `auto-update.sh` — прогоняет update-servers.sh и проверяет `check_state` (sing-box/tun0/table 100) |
 | **Ротация ключей** | `tun-healthcheck.sh` (cron 15,45 * * * *) сверяет всю секцию параметров outbound (pbk/sid/sni/fp/flow) со всеми строками подписки; при расхождении — перезапуск update-servers.sh |
 
@@ -80,7 +80,7 @@ WAN↑  ↑LAN
 | Компонент | Роль |
 |-----------|------|
 | `/etc/sing-box/config.json` | sing-box TUN inbound + outbounds (proxy/direct) + route rules |
-| `/etc/sing-box/update-servers.sh` | Скачивает подписку, случайно перебирает type=tcp узлы с live-тестом канала (204 + bulk), генерирует config.json, поднимает PBR-маршруты |
+| `/etc/sing-box/update-servers.sh` | Скачивает подписку, скипает xhttp и узлы с Россия/Torrent/GAMING в имени, случайно перебирает type=tcp узлы с live-тестом канала (204 + bulk), генерирует config.json, поднимает PBR-маршруты |
 | `/etc/sing-box/auto-update.sh` | Автообновление (cron `0 */2`, каждые 2 часа): update-servers.sh + проверка `check_state` |
 | `/etc/sing-box/tun-healthcheck.sh` | Сверяет всю секцию параметров outbound (pbk/sid/sni/fp/flow) со всеми строками подписки для хоста; при расхождении — перезапуск. Cron 15,45 * * * * + вызов из watcher |
 | `/etc/sing-box/singbox-pbr-watch.sh` | Следит за tun0, добавляет/восстанавливает ip rule + routes в table 100, запускает healthcheck |
