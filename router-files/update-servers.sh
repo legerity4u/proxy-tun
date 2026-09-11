@@ -210,11 +210,11 @@ total=$(echo "$dec" | grep -c "^vless://" || true)
 log "подписка: $total серверов"
 
 # ---------------------------------------------------------------
-# 2. кандидаты: все vless, скип не-tcp; COUNTRIES env — опциональный фильтр
+# 2. кандидаты: только vless-строки, скип не-tcp; COUNTRIES env — опц. фильтр
 # ---------------------------------------------------------------
-src_lines="$dec"
+src_lines=$(echo "$dec" | grep -E "^vless://" || true)
 if [ -n "$COUNTRIES" ]; then
-    src_lines=$(echo "$dec" | grep -E "^vless://.*#.*($COUNTRIES)" || true)
+    src_lines=$(echo "$src_lines" | grep -E "#.*($COUNTRIES)" || true)
     log "фильтр стран ($COUNTRIES): $(echo "$src_lines" | grep -c . || true)"
 fi
 
