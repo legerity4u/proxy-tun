@@ -40,11 +40,13 @@ start() {
     sleep 3
 
     ip rule add pref 100 fwmark 0x64 lookup 100 2>/dev/null
-    for i in 1 2 3; do
-        ip route replace default dev tun0 scope link table 100 2>/dev/null && break
-        sleep 2
-    done
-    ip route replace 192.168.1.0/24 dev br-lan scope link table 100 2>/dev/null
+    if [ -d /sys/class/net/tun0 ]; then
+        for i in 1 2 3; do
+            ip route replace default dev tun0 scope link table 100 2>/dev/null && break
+            sleep 2
+        done
+        ip route replace 192.168.1.0/24 dev br-lan scope link table 100 2>/dev/null
+    fi
     if ip route show table 100 | grep -q "default dev tun0"; then
         logger -t sing-box "PBR routes added for tun0"
     else

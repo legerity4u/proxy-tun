@@ -20,7 +20,7 @@ check_singbox_alive() {
 LAST=""
 ITER=0
 while true; do
-	if ip link show tun0 2>/dev/null | grep -q "UP,LOWER_UP"; then
+	if [ -d /sys/class/net/tun0 ] && ip link show tun0 2>/dev/null | grep -q "UP,LOWER_UP"; then
 		CUR="up"
 	else
 		CUR="down"
@@ -30,7 +30,7 @@ while true; do
 		ITER=$((ITER + 1))
 		check_health
 		check_singbox_alive
-		if ip link show tun0 2>/dev/null | grep -q "UP,LOWER_UP"; then
+		if [ -d /sys/class/net/tun0 ] && ip link show tun0 2>/dev/null | grep -q "UP,LOWER_UP"; then
 			if ! ip route show table 100 2>/dev/null | grep -q "default dev tun0"; then
 				ip rule add pref 100 fwmark 0x64 lookup 100 2>/dev/null
 				ip route replace default dev tun0 scope link table 100
