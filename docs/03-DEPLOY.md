@@ -46,6 +46,28 @@ free | grep Mem      # → Mem: всего 60000+ KB, свободно 25000+ KB
 
 ---
 
+## Шаг 0. Файл подписки
+
+Подписка хранится в домашнем каталоге root — `~/subscription.url`
+(т.е. `/root/subscription.url`):
+
+```bash
+printf '%s' 'https://connliberty.com/connection/subs/ваш-uuid-36-символов' > ~/subscription.url
+chmod 600 ~/subscription.url
+```
+
+**Проверка:**
+```bash
+cat ~/subscription.url
+# → https://connliberty.com/connection/subs/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+```
+
+> Скрипты (`update-servers.sh`, `tun-healthcheck.sh`) читают подписку из
+> `/etc/sing-box/subscription.url` (переменная `SUB_URL_FILE` внутри скриптов).
+> Связка делается симлинком в шаге 2 — после создания каталога.
+
+---
+
 ## Шаг 1. Установка sing-box
 
 ```bash
@@ -60,24 +82,23 @@ sing-box version | head -1   # → sing-box version 1.13.x (проверено 1
 > Пакеты `bash`, `jq`, `curl`, `ip-full`, `nftables-json`, `kmod-tun` — должны быть
 > вшиты в кастомную прошивку (см. [01-CUSTOM_FIRMWARE.md](01-CUSTOM_FIRMWARE.md)).
 > Если нет — установите сейчас.
->
-> **Опциональные пакеты** (диагностика):
-> ```bash
-> apk add htop time
-> ```
 
 ---
 
-## Шаг 2. Файл подписки
+## Шаг 2. Симлинк подписки для скриптов
+
+Файл подписки уже создан в шаге 0 (`~/subscription.url`). Скрипты ждут его в
+`/etc/sing-box/subscription.url` — ставим симлинк на файл из домашнего каталога:
 
 ```bash
 mkdir -p /etc/sing-box
-printf '%s' 'https://connliberty.com/connection/subs/ваш-uuid-36-символов' > /etc/sing-box/subscription.url
-chmod 600 /etc/sing-box/subscription.url
+ln -sf ~/subscription.url /etc/sing-box/subscription.url
 ```
 
 **Проверка:**
 ```bash
+ls -la /etc/sing-box/subscription.url
+# → subscription.url -> /root/subscription.url
 cat /etc/sing-box/subscription.url
 # → https://connliberty.com/connection/subs/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ```
@@ -259,10 +280,11 @@ nslookup kinopoisk.ru 127.0.0.1 | grep Address
 ## Шаг 8. Генерация config.json
 
 Скрипт `update-servers.sh` скачивает подписку, отбирает живые type=tcp узлы (xhttp скипается —
-sing-box его не умеет), перемешивает их случайно и перебирает по одному до первого рабочего:
-для каждого кандидата генерируется config.json, рестартует sing-box и делается live-тест
-канала через tun0 (generate_204 + bulk ≥ 50 KB/s). Первый прошедший остаётся активным.
-Опциональный фильтр стран — `COUNTRIES` env (по умолчанию все узлы подписки).
+sing-box его не умеет), выкидывает узлы, чьё имя содержит `Россия`/`Torrent`/`GAMING`
+(чёрный список `EXCLUDE_RE`, регистронезависимо), перемешивает оставшиеся случайно и
+перебирает по одному до первого рабочего: для каждого кандидата генерируется config.json,
+рестартует sing-box и делается live-тест канала через tun0 (generate_204 + bulk ≥ 50 KB/s).
+Первый прошедший остаётся активным. Опциональный белый список стран — `COUNTRIES` env.
 
 ```bash
 /etc/sing-box/update-servers.sh
@@ -497,7 +519,7 @@ chmod 600 /overlay/swapfile && mkswap /overlay/swapfile && swapon /overlay/swapf
 | `/etc/sing-box/auto-update.sh` | `router-files/auto-update.sh` (cron `0 */2`, шаг 10) |
 | `/etc/sing-box/tun-healthcheck.sh` | `router-files/tun-healthcheck.sh` (healthcheck ключей) |
 | `/etc/sing-box/singbox-pbr-watch.sh` | `router-files/singbox-pbr-watch.sh` |
-| `/etc/sing-box/subscription.url` | создан на шаге 2 |
+| `/etc/sing-box/subscription.url` | симлинк на `~/subscription.url` (шаги 0 и 2) |
 | `/etc/sing-box/proxy-tun.nft` | `router-files/proxy-tun.nft` |
 | `/etc/sing-box/proxy-tun.d/ajax.nft` | `router-files/proxy-tun.d/ajax.nft` (опциональный, include) |
 | `/etc/init.d/sing-box` | `router-files/sing-box.init` (заменяет пакетный) |
