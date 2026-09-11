@@ -1,16 +1,16 @@
 #!/bin/sh
 # Event-driven watcher: detects tun0 state changes and updates PBR table 100.
-# Also runs tun-healthcheck.sh every ~1 hour (1800 iterations at 2s).
+# Polls every 10s. Also runs tun-healthcheck.sh every ~1 hour (360 iterations at 10s).
 
 check_health() {
-	[ $ITER -lt 1800 ] && return
+	[ $ITER -lt 360 ] && return
 	ITER=0
 	[ "$CUR" != "up" ] && return
 	/etc/sing-box/tun-healthcheck.sh 2>/dev/null
 }
 
 check_singbox_alive() {
-	[ $ITER -lt 30 ] && return
+	[ $ITER -lt 6 ] && return
 	[ "$CUR" != "up" ] && return
 	if ! pgrep sing-box >/dev/null 2>&1; then
 		logger -t singbox-pbr "WARN: sing-box не запущен"
@@ -26,7 +26,7 @@ while true; do
 		CUR="down"
 	fi
 	if [ "$CUR" = "$LAST" ] && [ -n "$LAST" ]; then
-		sleep 2
+		sleep 10
 		ITER=$((ITER + 1))
 		check_health
 		check_singbox_alive
