@@ -43,6 +43,7 @@ log() { local ts; ts=$(date '+%T'); logger -t "$LOG_TAG" "[$ts] $*"; echo "[$ts]
 
 cleanup() { rm -rf "$TMPDIR"; }
 trap cleanup EXIT
+trap '' HUP
 
 # ---------------------------------------------------------------
 # helper: убить sing-box (быстро, с эскалацией)
@@ -140,8 +141,22 @@ start_singbox() {
         sleep 2
     done
     if ! ip -4 addr show tun0 2>/dev/null | grep -q "inet "; then
-        log "  ERR: tun0 не поднялся за 30s"
-        return 1
+        log "  ERR: tun0 не поднялся за 30s, повторяю запуск"
+        killall -9 sing-box 2>/dev/null || true
+        sleep 5
+        setsid /usr/bin/sing-box run -c "$CONF_FILE" -D /tmp/sing-box \
+            </dev/null >/dev/null 2>&1 &
+        echo $! > /var/run/sing-box.pid
+        local j
+        for j in $(seq 20); do
+            ip -4 addr show tun0 2>/dev/null | grep -q "inet " && break
+            sleep 2
+        done
+        if ! ip -4 addr show tun0 2>/dev/null | grep -q "inet "; then
+            log "  ERR: tun0 не поднялся и на повторе"
+            killall -9 sing-box 2>/dev/null || true
+            return 1
+        fi
     fi
     sleep 3
     ip rule add pref 100 fwmark 0x64 lookup 100 2>/dev/null || true
