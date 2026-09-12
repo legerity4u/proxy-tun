@@ -52,13 +52,13 @@ table inet proxy_tun {
         iifname "br-lan" udp dport 53 return
         iifname "br-lan" tcp dport 53 return
         iifname "br-lan" udp dport { 67, 68 } return
-        iifname "br-lan" ip daddr @youtube_v4 meta mark set 0x64
+        iifname "br-lan" ip daddr @youtube_v4 counter meta mark set 0x64
     }
 
     chain forward {
         type filter hook forward priority -200; policy accept;
 
-        iifname "br-lan" udp dport 443 ip daddr @youtube_v4 drop
+        iifname "br-lan" udp dport 443 ip daddr @youtube_v4 counter drop
     }
 }
 

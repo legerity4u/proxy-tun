@@ -26,4 +26,4 @@ table inet proxy_tun {
     }
 }
 
-add rule inet proxy_tun prerouting iifname "br-lan" ip daddr @ajax_v4 meta mark set 0x64
+add rule inet proxy_tun prerouting iifname "br-lan" ip daddr @ajax_v4 counter meta mark set 0x64
