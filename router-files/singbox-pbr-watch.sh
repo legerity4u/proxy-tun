@@ -5,6 +5,9 @@
 #   consumers on br-lan? -> youtube demand counter grows? -> tun0 TX frozen?
 #   -> probe 204 + bulk -> only then update-servers.sh (cooldown 30 min).
 # All signals are tunnel-scoped: direct traffic (VK etc.) is invisible by design.
+# 2026-09-18: zero-demand windows no longer reset SUSPECT — with sparse demand
+#   (Ajax hub backoff >60s, no YouTube viewers) 2 confirmations never accrued
+#   and a dead channel sat unrepaired for hours (dacha incident 2026-09-18).
 
 check_health() {
 	[ $ITER -lt 360 ] && return
@@ -30,7 +33,10 @@ trigger_heal() {
 # Repair the channel ONLY on confirmed symptoms. Counter deltas every 6
 # ticks (60s). Suspicion = demand grew while tun0 TX delta < 10000 B/min
 # (~170 B/s; TROUBLESHOOTING И documents bulk 0-585 B/s on throttled nodes).
-# Two consecutive windows confirm; probe (204, then bulk >=50 KB/s) decides.
+# Two confirmed windows trigger a probe (204, then bulk >=50 KB/s) which
+# decides. Zero-demand windows neither increment nor reset SUSPECT: retry
+# bursts pause >60s, so a reset there would erase real evidence. Only a
+# window with demand growth and healthy TX clears suspicion.
 check_channel() {
 	CH=$((CH + 1))
 	[ $CH -lt 6 ] && return
@@ -58,10 +64,12 @@ check_channel() {
 	if [ -n "$DEMAND_PREV" ] && [ "$DEMAND" -ge "$DEMAND_PREV" ] && [ "$TX" -ge "$TX_PREV" ]; then
 		DEMAND_D=$((DEMAND - DEMAND_PREV))
 		TX_D=$((TX - TX_PREV))
-		if [ "$DEMAND_D" -gt 0 ] && [ "$TX_D" -lt 10000 ]; then
-			SUSPECT=$((SUSPECT + 1))
-		else
-			SUSPECT=0
+		if [ "$DEMAND_D" -gt 0 ]; then
+			if [ "$TX_D" -lt 10000 ]; then
+				SUSPECT=$((SUSPECT + 1))
+			else
+				SUSPECT=0
+			fi
 		fi
 		# 3: suspicion confirmed twice -> probe before touching anything
 		if [ "$SUSPECT" -ge 2 ] && [ "$COOLDOWN" -le 0 ] \
