@@ -1,10 +1,15 @@
 #!/usr/sbin/nft -f
-# ajax.nft — Ajax Hub cloud IPs (AWS EU + backup) → PBR через туннель
+# ajax.nft — Ajax Hub cloud IPs → PBR через туннель
 # Опциональный модуль, подключается из proxy-tun.nft строкой:
 #   include "/etc/sing-box/proxy-tun.d/ajax.nft"
 #
-# Зачем: ISP (Истранет) блокирует IP-диапазоны AWS EU, к которым
-# обращается Ajax Hub. Прямой маршрут не работает → @ajax_v4 → tun0.
+# Зачем: ISP (Истранет) блокирует IP-диапазоны облака Ajax. Прямой маршрут
+# не работает → @ajax_v4 → tun0.
+#
+# Источник адресов (2026-10-06): официальный список облака Ajax
+# (hts-hub / hts-hubs / hts-gw / hts-logs / hub-gw .prod.ajax.systems),
+# фактические DNS-ответы облака на даче и наблюдённый conntrack хаба.
+# Порты Ajax Hub: 80, 1789, 2020, 2021, 5057, 5059.
 #
 # Идемпотентно: вызывается после flush table из главного файла.
 # Не запускать как standalone (нужна существующая таблица proxy_tun).
@@ -14,14 +19,19 @@ table inet proxy_tun {
         type ipv4_addr
         flags interval
         elements = {
-            35.180.2.46,
-            63.34.34.82,
-            63.32.200.183,
-            34.249.240.61,
-            194.87.103.60,
-            194.87.110.46,
-            195.133.49.175,
-            167.99.19.236
+            63.34.34.82,        # AWS eu-west-1 (Dublin)
+            63.32.200.183,      # AWS eu-west-1 (Dublin)
+            34.249.240.61,      # AWS eu-west-1 (Dublin)
+            52.57.175.225,      # AWS eu-central-1 (Frankfurt)
+            52.57.131.150,      # AWS eu-central-1 (Frankfurt)
+            178.62.38.104,      # DigitalOcean (London)
+            157.230.78.73,      # DigitalOcean
+            167.99.19.236,      # DigitalOcean
+            54.216.172.252,     # AWS (hubs-logs.prod.ajax.systems)
+            35.180.2.46,        # AWS eu-west-3 (Paris)
+            194.87.103.60,      # ранее наблюдался в conntrack хаба
+            194.87.110.46,      # ранее наблюдался в conntrack хаба
+            195.133.49.175      # ранее наблюдался в conntrack хаба
         }
     }
 }
